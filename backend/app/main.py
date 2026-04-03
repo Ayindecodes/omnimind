@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from app.config import get_settings
 from app.database import Base, engine
 from app.logging_config import setup_logging
-from app.api.routes import chat, health, memory
+from app.api.routes import chat, decisions, health, memory
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +34,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router, prefix="/api/v1")
     app.include_router(chat.router, prefix="/api/v1")
     app.include_router(memory.router, prefix="/api/v1")
+    app.include_router(decisions.router, prefix="/api/v1")
     return app
 
 

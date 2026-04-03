@@ -5,9 +5,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.models import Conversation, Message, MessageEmbedding
+from app.models import Conversation, DecisionRecord, Message, MessageEmbedding
 from app.services import embeddings as embedding_service
 from app.services import llm as llm_service
+from app.services.decision_engine import evaluate_turn
 from app.services.memory_retrieval import retrieve_similar_messages
 
 logger = logging.getLogger(__name__)
@@ -111,12 +112,22 @@ def append_user_message_and_reply(
     recent = _recent_messages(db, conversation_id, settings.chat_history_limit)
     llm_messages = _build_llm_messages(memory_pairs, recent)
 
-    assistant_text = llm_service.chat_complete(llm_messages)
-    if assistant_text is None:
+    raw_reply = llm_service.chat_complete(llm_messages)
+    llm_succeeded = raw_reply is not None
+    if raw_reply is None:
         assistant_text = (
             f"[OmniMind] No LLM configured or generation failed. "
             f"Heard: {user_content[:200]}{'…' if len(user_content) > 200 else ''}"
         )
+    else:
+        assistant_text = raw_reply
+
+    turn = evaluate_turn(
+        user_content=user_content,
+        memory_hit_count=len(memory_pairs),
+        llm_succeeded=llm_succeeded,
+        user_embedding_ok=user_vec is not None,
+    )
 
     assistant_msg = Message(
         conversation_id=conversation_id,
@@ -128,6 +139,18 @@ def append_user_message_and_reply(
 
     asst_vec = embedding_service.embed_text(assistant_text)
     _persist_embedding(db, assistant_msg, asst_vec)
+
+    db.add(
+        DecisionRecord(
+            conversation_id=conversation_id,
+            user_message_id=user_msg.id,
+            assistant_message_id=assistant_msg.id,
+            action=turn.action,
+            confidence=turn.confidence,
+            rules_fired=list(turn.rules_fired),
+            context=dict(turn.context),
+        )
+    )
     db.commit()
     db.refresh(user_msg)
     db.refresh(assistant_msg)

@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, String, func
 from sqlalchemy.dialects.postgresql import UUID
@@ -7,6 +8,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 from app.models.message import Message
+
+if TYPE_CHECKING:
+    from app.models.decision_record import DecisionRecord
 
 
 class Conversation(Base):
@@ -28,4 +32,9 @@ class Conversation(Base):
 
     messages: Mapped[list[Message]] = relationship(
         "Message", back_populates="conversation", order_by=Message.created_at
+    )
+    decisions: Mapped[list[DecisionRecord]] = relationship(
+        "DecisionRecord",
+        back_populates="conversation",
+        order_by="DecisionRecord.created_at",
     )
